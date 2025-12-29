@@ -1,0 +1,135 @@
+{
+  "name": "Sync Comodo Devices to Autotask",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "getWithCcs",
+        "returnAll": true,
+        "additionalFields": {
+          "osType": [1, 2, 3]
+        }
+      },
+      "id": "comodo-get-devices",
+      "name": "Comodo - Get Devices with AV Status",
+      "type": "n8n-nodes-comodo.comodo",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "comodoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Comodo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-batches",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform Comodo device data to Autotask format\nconst comodoDevice = $input.first().json;\n\nreturn {\n  json: {\n    // Map to Autotask Configuration Item fields\n    referenceTitle: comodoDevice.name || comodoDevice.friendly_name,\n    serialNumber: comodoDevice.serial_number || '',\n    installedProductCategoryID: 5, // Workstation category\n    \n    // Custom fields for RMM/AV status\n    userDefinedFields: {\n      comodoDeviceId: comodoDevice.id,\n      rmmStatus: comodoDevice.online_status === 1 ? 'Online' : 'Offline',\n      avStatus: comodoDevice.ccs_status || 'Unknown',\n      avVersion: comodoDevice.ccs_version || '',\n      lastSeen: comodoDevice.was_active_at || '',\n      osType: comodoDevice.os_type_name || '',\n      osVersion: comodoDevice.os_version || '',\n      companyName: comodoDevice.company_name || ''\n    }\n  }\n};"
+      },
+      "id": "transform-data",
+      "name": "Transform to Autotask Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "resource": "configurationItem",
+        "operation": "upsert"
+      },
+      "id": "autotask-upsert",
+      "name": "Autotask - Upsert Configuration Item",
+      "type": "n8n-nodes-base.autotask",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "autotaskApi": {
+          "id": "YOUR_AUTOTASK_CREDENTIAL_ID",
+          "name": "Autotask API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Comodo - Get Devices with AV Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comodo - Get Devices with AV Status": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "Transform to Autotask Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform to Autotask Format": {
+      "main": [
+        [
+          {
+            "node": "Autotask - Upsert Configuration Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
+
+
+
+
+

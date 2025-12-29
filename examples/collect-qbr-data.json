@@ -1,0 +1,173 @@
+{
+  "name": "Collect RMM Data for QBR Reports (30 Days)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "daily-trigger",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "resource": "statistics",
+        "operation": "getDeviceSummary"
+      },
+      "id": "get-statistics",
+      "name": "Comodo - Get Device Statistics",
+      "type": "n8n-nodes-comodo.comodo",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "credentials": {
+        "comodoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Comodo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "getWithCcs",
+        "returnAll": true
+      },
+      "id": "get-all-devices",
+      "name": "Comodo - Get All Devices with CCS",
+      "type": "n8n-nodes-comodo.comodo",
+      "typeVersion": 1,
+      "position": [460, 400],
+      "credentials": {
+        "comodoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Comodo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for storage with timestamp\nconst statistics = $('Comodo - Get Device Statistics').first().json;\nconst devices = $('Comodo - Get All Devices with CCS').all();\n\nconst timestamp = new Date().toISOString();\nconst dateKey = timestamp.split('T')[0];\n\n// Aggregate device metrics\nconst metrics = {\n  date: dateKey,\n  timestamp: timestamp,\n  totalDevices: devices.length,\n  onlineDevices: devices.filter(d => d.json.online_status === 1).length,\n  offlineDevices: devices.filter(d => d.json.online_status === 2).length,\n  \n  // AV Status breakdown\n  avInstalled: devices.filter(d => d.json.ccs_installed === true).length,\n  avRunning: devices.filter(d => d.json.ccs_status === 'Running').length,\n  avOutdated: devices.filter(d => d.json.ccs_db_outdated === true).length,\n  \n  // OS breakdown\n  windowsDevices: devices.filter(d => d.json.os_type === 1).length,\n  macDevices: devices.filter(d => d.json.os_type === 2).length,\n  linuxDevices: devices.filter(d => d.json.os_type === 3).length,\n  \n  // Summary statistics from API\n  summaryStats: statistics,\n  \n  // Detailed device data for drill-down\n  deviceDetails: devices.map(d => ({\n    id: d.json.id,\n    name: d.json.name,\n    company: d.json.company_name,\n    online: d.json.online_status === 1,\n    avStatus: d.json.ccs_status,\n    lastSeen: d.json.was_active_at\n  }))\n};\n\nreturn { json: metrics };"
+      },
+      "id": "aggregate-metrics",
+      "name": "Aggregate Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "qbr_daily_metrics",
+        "columns": "date, timestamp, total_devices, online_devices, offline_devices, av_installed, av_running, av_outdated, windows_devices, mac_devices, linux_devices, raw_data",
+        "values": "={{ $json.date }}, {{ $json.timestamp }}, {{ $json.totalDevices }}, {{ $json.onlineDevices }}, {{ $json.offlineDevices }}, {{ $json.avInstalled }}, {{ $json.avRunning }}, {{ $json.avOutdated }}, {{ $json.windowsDevices }}, {{ $json.macDevices }}, {{ $json.linuxDevices }}, '{{ JSON.stringify($json) }}'"
+      },
+      "id": "store-to-db",
+      "name": "Store to Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [920, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM qbr_daily_metrics WHERE date < NOW() - INTERVAL '30 days'"
+      },
+      "id": "cleanup-old-data",
+      "name": "Cleanup Old Data (30+ days)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [1140, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Comodo - Get Device Statistics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Comodo - Get All Devices with CCS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comodo - Get Device Statistics": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comodo - Get All Devices with CCS": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Metrics": {
+      "main": [
+        [
+          {
+            "node": "Store to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store to Database": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Old Data (30+ days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
+
+
+
+
+

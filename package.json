@@ -1,0 +1,65 @@
+{
+  "name": "n8n-nodes-comodo",
+  "version": "1.0.0",
+  "description": "n8n community node for Comodo Endpoint Manager (RMM & Antivirus)",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "comodo",
+    "rmm",
+    "endpoint-manager",
+    "antivirus",
+    "xcitium"
+  ],
+  "license": "MIT",
+  "homepage": "",
+  "author": {
+    "name": "MightyBlue MSP",
+    "email": "support@mightybluemsp.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "format": "prettier nodes credentials --write",
+    "lint": "eslint nodes credentials package.json",
+    "lintfix": "eslint nodes credentials package.json --fix",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/ComodoApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Comodo/Comodo.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^18.16.0",
+    "@typescript-eslint/parser": "^5.59.0",
+    "eslint": "^8.39.0",
+    "gulp": "^4.0.2",
+    "n8n-workflow": "^1.0.0",
+    "prettier": "^2.8.8",
+    "typescript": "^5.0.4"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "dependencies": {
+    "n8n-core": "^1.0.0"
+  }
+}
+
+
+
+
+

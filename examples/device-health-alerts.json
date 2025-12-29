@@ -1,0 +1,214 @@
+{
+  "name": "Comodo Device Health Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "check-trigger",
+      "name": "Check Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "getAll",
+        "returnAll": true,
+        "additionalFields": {
+          "onlineStatus": 2
+        }
+      },
+      "id": "get-offline-devices",
+      "name": "Comodo - Get Offline Devices",
+      "type": "n8n-nodes-comodo.comodo",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "credentials": {
+        "comodoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Comodo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "device",
+        "operation": "getWithCcs",
+        "returnAll": true,
+        "additionalFields": {
+          "securityClientStatus": [1, 4]
+        }
+      },
+      "id": "get-av-issues",
+      "name": "Comodo - Get Devices with AV Issues",
+      "type": "n8n-nodes-comodo.comodo",
+      "typeVersion": 1,
+      "position": [460, 400],
+      "credentials": {
+        "comodoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Comodo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const offlineDevices = $('Comodo - Get Offline Devices').all();\nconst avIssueDevices = $('Comodo - Get Devices with AV Issues').all();\n\nconst alerts = [];\n\n// Check for offline devices\nif (offlineDevices.length > 0) {\n  alerts.push({\n    type: 'OFFLINE_DEVICES',\n    severity: 'warning',\n    message: `${offlineDevices.length} device(s) are currently offline`,\n    devices: offlineDevices.map(d => ({\n      name: d.json.name,\n      company: d.json.company_name,\n      lastSeen: d.json.was_active_at\n    }))\n  });\n}\n\n// Check for AV issues\nif (avIssueDevices.length > 0) {\n  alerts.push({\n    type: 'AV_ISSUES',\n    severity: 'critical',\n    message: `${avIssueDevices.length} device(s) have antivirus issues`,\n    devices: avIssueDevices.map(d => ({\n      name: d.json.name,\n      company: d.json.company_name,\n      avStatus: d.json.ccs_status\n    }))\n  });\n}\n\nif (alerts.length === 0) {\n  return []; // No alerts to send\n}\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "id": "check-alerts",
+      "name": "Check for Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "is-critical",
+      "name": "Is Critical?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "channel": "#alerts-critical",
+        "text": "=🚨 *CRITICAL ALERT*\n\n{{ $json.message }}\n\n*Affected Devices:*\n{{ $json.devices.map(d => `• ${d.name} (${d.company})`).join('\\n') }}",
+        "otherOptions": {}
+      },
+      "id": "slack-critical",
+      "name": "Slack - Critical Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [1140, 200],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "name": "Slack"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#alerts-warning",
+        "text": "=⚠️ *Warning Alert*\n\n{{ $json.message }}\n\n*Affected Devices:*\n{{ $json.devices.map(d => `• ${d.name} (${d.company}) - Last seen: ${d.lastSeen}`).join('\\n') }}",
+        "otherOptions": {}
+      },
+      "id": "slack-warning",
+      "name": "Slack - Warning Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [1140, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "name": "Slack"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Check Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Comodo - Get Offline Devices",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Comodo - Get Devices with AV Issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comodo - Get Offline Devices": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comodo - Get Devices with AV Issues": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Is Critical?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Critical?": {
+      "main": [
+        [
+          {
+            "node": "Slack - Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack - Warning Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
+
+
+
+
+
